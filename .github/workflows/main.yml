@@ -43,10 +43,9 @@ jobs:
       - name: Install Vulkan SDK
         shell: pwsh
         run: |
-          curl.exe -L -o vk-sdk.zip "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0.zip"
-          Expand-Archive -Path vk-sdk.zip -DestinationPath C:\VulkanSDK -Force
-          $dir = Get-ChildItem C:\VulkanSDK -Directory | Select-Object -First 1
-          echo "VULKAN_SDK=$($dir.FullName)" >> $env:GITHUB_ENV
+          curl.exe -L -o vk-sdk.exe "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0-Installer.exe"
+          Start-Process .\vk-sdk.exe -ArgumentList "--accept-licenses","--default-no","--confirm-command","install","--root","C:\VulkanSDK" -Wait
+          echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
       - name: Compile shaders
         shell: pwsh
         run: |
