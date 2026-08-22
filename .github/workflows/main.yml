@@ -1,0 +1,28 @@
+name: Автоматическая сборка
+
+# Запускать при каждом обновлении кода
+on: [push]
+
+jobs:
+  build:
+    # Используем свежую версию Ubuntu для сборки
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Скачиваем ваш код из репозитория
+      - name: Получить код
+        uses: actions/checkout@v4
+        
+      # 2. Устанавливаем Node.js (если проект на JS/TS)
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x' # Укажите вашу версию, например, '18.x' или '20.x'
+          
+      # 3. Устанавливаем зависимости (аналог npm install)
+      - name: Установить зависимости
+        run: npm ci
+        
+      # 4. Компиляция / Сборка (замените на вашу команду, например, npm run build)
+      - name: Скомпилировать проект
+        run: npm run build 
