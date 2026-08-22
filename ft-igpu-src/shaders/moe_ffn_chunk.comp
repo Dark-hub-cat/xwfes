@@ -1,0 +1,104 @@
+#version 450
+layout(local_size_x = 64) in;
+
+layout(std430, set = 0, binding = 0) restrict readonly buffer XB { float xb[]; };
+layout(std430, set = 0, binding = 1) restrict readonly buffer WB { uint wb[]; };
+layout(std430, set = 0, binding = 2) restrict buffer OB { float ob[]; };
+layout(std430, set = 0, binding = 3) restrict buffer HB { float hb[]; };
+
+layout(push_constant) uniform PC {
+    ivec4 p0;
+    ivec4 p1;
+} pc;
+
+float half2f(uint h) {
+    uint sign = (h & 0x8000u) << 16u;
+    uint e = (h >> 10) & 0x1Fu;
+    uint m = h & 0x3FFu;
+    uint b;
+    if (e == 0u) {
+        if (m == 0u) return uintBitsToFloat(sign);
+        uint ee = 0u;
+        do { ++ee; m <<= 1u; } while ((m & 0x400u) == 0u);
+        m &= 0x3FFu;
+        b = sign | ((127u - 15u - ee) << 23u) | (m << 13u);
+    } else if (e == 31u) {
+        b = sign | 0x7F800000u | (m << 13u);
+    } else {
+        b = sign | ((e - 15u + 127u) << 23u) | (m << 13u);
+    }
+    return uintBitsToFloat(b);
+}
+
+uint rd8(uint o) {
+    return (wb[o >> 2] >> ((o & 3u) * 8u)) & 0xFFu;
+}
+
+uint rd16(uint o) {
+    if ((o & 1u) == 0u) {
+        return (wb[o >> 2] >> ((o & 3u) * 8u)) & 0xFFFFu;
+    }
+    return rd8(o) | (rd8(o + 1u) << 8u);
+}
+
+float dec_w(int dt, uint rowBase, int k) {
+    if (dt == 0) {
+        return uintBitsToFloat(wb[(rowBase >> 2) + uint(k)]);
+    }
+    if (dt == 1) {
+        return half2f(rd16(rowBase + uint(k) * 2u));
+    }
+    if (dt == 2) {
+        const int blk = k >> 5;
+        const int j = k & 31;
+        const uint bo = rowBase + uint(blk) * 34u;
+        const float d = half2f(rd16(bo));
+        const uint q = rd8(bo + 2u + uint(j));
+        return d * float(int(q << 24u) >> 24);
+    }
+    const int blk = k >> 5;
+    const int j = k & 31;
+    const uint bo = rowBase + uint(blk) * 18u;
+    const float d = half2f(rd16(bo));
+    const uint bytev = rd8(bo + 2u + uint(j >> 1));
+    const int nib = (j & 1) != 0 ? int((bytev >> 4) & 0xFu) : int(bytev & 0xFu);
+    return d * float(nib - 8);
+}
+
+void main() {
+    const int M = pc.p0.x;
+    const int K = pc.p0.y;
+    const int IC = pc.p0.z;
+    const int dt = pc.p0.w;
+    const int phase = pc.p1.x;
+    const uint guStride = uint(pc.p1.y);
+    const uint dnStride = uint(pc.p1.z);
+
+    if (phase == 0) {
+        const int idx = int(gl_GlobalInvocationID.x);
+        if (idx >= M * IC) return;
+        const int m = idx / IC;
+        const int i = idx % IC;
+        const uint gb = uint(i) * guStride;
+        const uint ub = uint(IC) * guStride + uint(i) * guStride;
+        float ag = 0.0;
+        float au = 0.0;
+        for (int k = 0; k < K; ++k) {
+            const float xk = xb[m * K + k];
+            ag += xk * dec_w(dt, gb, k);
+            au += xk * dec_w(dt, ub, k);
+        }
+        hb[idx] = (ag / (1.0 + exp(-ag))) * au;
+    } else {
+        const int idx = int(gl_GlobalInvocationID.x);
+        if (idx >= M * K) return;
+        const int m = idx / K;
+        const int k = idx % K;
+        const uint db = 2u * uint(IC) * guStride;
+        float acc = 0.0;
+        for (int i = 0; i < IC; ++i) {
+            acc += hb[m * IC + i] * dec_w(dt, db + uint(i) * dnStride, k);
+        }
+        ob[idx] += acc;
+    }
+}
