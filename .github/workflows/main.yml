@@ -37,14 +37,16 @@ jobs:
 
   vulkan-windows:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Install Vulkan SDK
         shell: pwsh
         run: |
-          curl.exe -L -o vk-sdk.exe "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0-Installer.exe"
-          Start-Process .\vk-sdk.exe -ArgumentList "/S" -Wait
-          echo "VULKAN_SDK=C:\VulkanSDK\1.4.309.0" >> $env:GITHUB_ENV
+          curl.exe -L -o vk-sdk.zip "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0.zip"
+          Expand-Archive -Path vk-sdk.zip -DestinationPath C:\VulkanSDK -Force
+          $dir = Get-ChildItem C:\VulkanSDK -Directory | Select-Object -First 1
+          echo "VULKAN_SDK=$($dir.FullName)" >> $env:GITHUB_ENV
       - name: Compile shaders
         shell: pwsh
         run: |
@@ -54,6 +56,8 @@ jobs:
         run: cmake -S ft-igpu-src -B build-vk -DCMAKE_BUILD_TYPE=Release "-DFT_WITH_VULKAN=ON" "-DCMAKE_PREFIX_PATH=$env:VULKAN_SDK"
       - name: Build (Vulkan)
         run: cmake --build build-vk --config Release -j
+      - name: Test (Vulkan build, CPU fallback in tests)
+        run: ctest --test-dir build-vk -C Release --output-on-failure
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
