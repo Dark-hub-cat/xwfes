@@ -13,13 +13,16 @@ jobs:
         run: cmake --build build --config Release -j
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Collect binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin-out | Out-Null
+          Copy-Item build/Release/*.exe bin-out/
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ft-windows-x64
-          path: |
-            build/ft-cli.exe
-            build/ft-tests.exe
+          path: bin-out/*.exe
 
   core-linux:
     runs-on: ubuntu-24.04
@@ -57,11 +60,14 @@ jobs:
         run: cmake --build build-vk --config Release -j
       - name: Test (Vulkan build, CPU fallback in tests)
         run: ctest --test-dir build-vk -C Release --output-on-failure
+      - name: Collect binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin-out | Out-Null
+          Copy-Item build-vk/Release/*.exe bin-out/
+          Copy-Item ft-igpu-src/shaders/moe_ffn_chunk.spv bin-out/
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ft-windows-x64-vulkan
-          path: |
-            build-vk/ft-cli.exe
-            build-vk/ft-tests.exe
-            ft-igpu-src/shaders/moe_ffn_chunk.spv
+          path: bin-out/*
