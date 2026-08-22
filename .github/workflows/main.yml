@@ -1,1 +1,64 @@
+name: build
 
+on: [push, workflow_dispatch]
+
+jobs:
+  core-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S ft-igpu-src -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release -j
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft-windows-x64
+          path: |
+            build/ft-cli.exe
+            build/ft-tests.exe
+
+  core-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S ft-igpu-src -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ft-linux-x64
+          path: |
+            build/ft-cli
+            build/ft-tests
+
+  vulkan-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          curl.exe -L -o vk-sdk.exe "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0-Installer.exe"
+          Start-Process .\vk-sdk.exe -ArgumentList "/S" -Wait
+          echo "VULKAN_SDK=C:\VulkanSDK\1.4.309.0" >> $env:GITHUB_ENV
+      - name: Compile shaders
+        shell: pwsh
+        run: |
+          & "$env:VULKAN_SDK\Bin\glslangValidator.exe" -V ft-igpu-src/shaders/moe_ffn_chunk.comp -o ft-igpu-src/shaders/moe_ffn_chunk.spv
+      - name: Configure (Vulkan)
+        shell: pwsh
+        run: cmake -S ft-igpu-src -B build-vk -DCMAKE_BUILD_TYPE=Release "-DFT_WITH_VULKAN=ON" "-DCMAKE_PREFIX_PATH=$env:VULKAN_SDK"
+      - name: Build (Vulkan)
+        run: cmake --build build-vk --config Release -j
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ft-windows-x64-vulkan
+          path: |
+            build-vk/ft-cli.exe
+            build-vk/ft-tests.exe
+            ft-igpu-src/shaders/moe_ffn_chunk.spv
